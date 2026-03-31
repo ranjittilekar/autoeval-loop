@@ -171,12 +171,8 @@ The improved prompt is useful. The experiment log is more useful. It tells the n
 
 ## Lessons Learned
 
-> To be updated after first full optimization run.
 
-- What the loop fixed first and why (always the worst-scoring criterion)
-- What it tried that made things worse (and auto-reverted)
-- What the final prompt change log revealed about the original prompt's failure modes
-- Why the experiment log is more valuable than the final prompt
+- Running in Quick Mode (6 judgments per criterion) introduced enough variance that the loop repeatedly re-targeted C2 (No Hallucination) across 7 of 10 rounds even after it was largely fixed. Full Mode (15 judgments) smooths this out. The lesson: eval sample size is not a technical detail, it is a product decision that determines whether the loop converges efficiently or spins on a solved problem.
 
 ---
 

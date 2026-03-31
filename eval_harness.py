@@ -31,7 +31,7 @@ class EvalResult:
 
 class EvalHarness:
     GROQ_MODEL = "llama-3.1-8b-instant"
-    GEMINI_MODEL = "gemini-1.5-flash"
+    GEMINI_MODEL = "gemini-2.5-flash"
 
     def __init__(
         self,

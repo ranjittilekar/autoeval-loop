@@ -32,7 +32,7 @@ class RoundResult:
 # ---------------------------------------------------------------------------
 
 class OptimizationLoop:
-    GEMINI_MODEL = "gemini-1.5-flash"
+    GEMINI_MODEL = "gemini-2.5-flash"
 
     def __init__(
         self,
