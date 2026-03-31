@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import io
 import json
 import os
 import pathlib
 import shutil
+import zipfile
 
+import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 from dotenv import load_dotenv
 
@@ -49,7 +53,7 @@ def _load_json(path: pathlib.Path) -> list | dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Sub-renderers for Tab 1 setup columns
+# Setup column renderers
 # ---------------------------------------------------------------------------
 
 def _render_broken_prompt(broken_prompt: str) -> None:
@@ -95,7 +99,7 @@ def _render_scenarios(scenarios: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Live progress feed renderer
+# Live progress feed
 # ---------------------------------------------------------------------------
 
 def _render_progress_feed(
@@ -130,6 +134,269 @@ def _render_progress_feed(
 
 
 # ---------------------------------------------------------------------------
+# Results tab builders
+# ---------------------------------------------------------------------------
+
+def _build_score_chart(
+    round_results: list[RoundResult],
+    initial_score: float,
+    target_score: float = 95.0,
+) -> go.Figure:
+    kept_x, kept_y = [0], [initial_score]
+    rev_x: list[int] = []
+    rev_y: list[float] = []
+
+    for r in round_results:
+        if r.kept:
+            kept_x.append(r.round_num)
+            kept_y.append(r.score_after)
+        else:
+            rev_x.append(r.round_num)
+            rev_y.append(r.score_after)
+
+    total_rounds = round_results[-1].round_num if round_results else 0
+
+    fig = go.Figure()
+
+    # KEPT trace — green filled circles
+    fig.add_trace(go.Scatter(
+        x=kept_x,
+        y=kept_y,
+        mode="lines+markers",
+        name="Kept",
+        line=dict(color="#2ca02c", width=2),
+        marker=dict(symbol="circle", size=10, color="#2ca02c"),
+    ))
+
+    # REVERTED trace — red X markers (no connecting line)
+    if rev_x:
+        fig.add_trace(go.Scatter(
+            x=rev_x,
+            y=rev_y,
+            mode="markers",
+            name="Reverted",
+            marker=dict(symbol="x", size=12, color="#d62728", line=dict(width=2)),
+        ))
+
+    # Target line
+    x_max = max(total_rounds, 1)
+    fig.add_shape(
+        type="line",
+        x0=0, x1=x_max,
+        y0=target_score, y1=target_score,
+        line=dict(color="#ff7f0e", dash="dash", width=1.5),
+    )
+    fig.add_annotation(
+        x=x_max, y=target_score,
+        text=f"Target ({target_score:.0f}%)",
+        showarrow=False,
+        xanchor="right",
+        yanchor="bottom",
+        font=dict(color="#ff7f0e", size=11),
+    )
+
+    # Annotate first and last kept points
+    if kept_x and kept_y:
+        fig.add_annotation(
+            x=kept_x[0], y=kept_y[0],
+            text=f"{kept_y[0]:.1f}%",
+            showarrow=True, arrowhead=2, ay=-30,
+            font=dict(size=11),
+        )
+        if len(kept_x) > 1:
+            fig.add_annotation(
+                x=kept_x[-1], y=kept_y[-1],
+                text=f"{kept_y[-1]:.1f}%",
+                showarrow=True, arrowhead=2, ay=-30,
+                font=dict(size=11),
+            )
+
+    fig.update_layout(
+        title=f"Score Progression: Round 0 → Round {total_rounds}",
+        xaxis_title="Round",
+        yaxis_title="Score (%)",
+        yaxis=dict(range=[0, 105]),
+        legend=dict(orientation="h", y=-0.15),
+        margin=dict(t=50, b=60, l=50, r=30),
+        height=420,
+    )
+
+    return fig
+
+
+def _build_heatmap(
+    round_results: list[RoundResult],
+    criteria: list[dict],
+) -> go.Figure:
+    cids = [c["id"] for c in criteria]
+    short_labels = [f"{c['id']}: {c['label'][:20]}" for c in criteria]
+    round_nums = [r.round_num for r in round_results]
+
+    # Build matrix: rows = criteria, cols = rounds
+    z = [
+        [r.per_criterion_scores.get(cid, 0) for r in round_results]
+        for cid in cids
+    ]
+    text = [
+        [f"{v:.0f}%" for v in row]
+        for row in z
+    ]
+
+    fig = go.Figure(go.Heatmap(
+        z=z,
+        x=[f"R{n}" for n in round_nums],
+        y=short_labels,
+        text=text,
+        texttemplate="%{text}",
+        colorscale=[
+            [0.0, "#d62728"],
+            [0.5, "#ffdd57"],
+            [1.0, "#2ca02c"],
+        ],
+        zmin=0,
+        zmax=100,
+        colorbar=dict(title="Pass rate %"),
+    ))
+
+    fig.update_layout(
+        title="Per-Criterion Pass Rate by Round",
+        xaxis_title="Round",
+        yaxis_title="Criterion",
+        height=320,
+        margin=dict(t=50, b=50, l=200, r=30),
+    )
+
+    return fig
+
+
+def _build_summary_df(
+    criteria: list[dict],
+    round_results: list[RoundResult],
+    baseline_criterion_scores: dict[str, float],
+) -> pd.DataFrame:
+    if not round_results:
+        return pd.DataFrame()
+
+    final_scores = round_results[-1].per_criterion_scores
+    rows = []
+    for c in criteria:
+        cid = c["id"]
+        baseline = round(baseline_criterion_scores.get(cid, 0.0), 1)
+        final = round(final_scores.get(cid, 0.0), 1)
+        rows.append({
+            "Criterion": f"{cid}: {c['label']}",
+            "Baseline %": baseline,
+            "Final %": final,
+            "Change (pp)": round(final - baseline, 1),
+        })
+
+    return pd.DataFrame(rows)
+
+
+def _highlight_positive_change(row: pd.Series) -> list[str]:
+    color = "background-color: #d4edda" if row["Change (pp)"] > 0 else ""
+    return [color] * len(row)
+
+
+def _build_download_zip(summary: dict) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("final_prompt.txt", summary.get("final_prompt", ""))
+        zf.writestr("results.log", summary.get("full_log", ""))
+
+        summary_export = {
+            k: v for k, v in summary.items()
+            if k not in ("full_log", "commit_history")  # already separate files
+        }
+        # commit_history is small — include it
+        summary_export["commit_history"] = summary.get("commit_history", [])
+        zf.writestr("summary.json", json.dumps(summary_export, indent=2))
+
+    return buf.getvalue()
+
+
+def _render_results_tabs(
+    summary: dict,
+    round_results: list[RoundResult],
+    criteria: list[dict],
+    baseline_criterion_scores: dict[str, float],
+) -> None:
+    score_tab, heatmap_tab, diff_tab = st.tabs(
+        ["Score Chart", "Criterion Breakdown", "Prompt Diff & Log"]
+    )
+
+    # ── Score Chart ──────────────────────────────────────────────────────────
+    with score_tab:
+        if round_results:
+            fig = _build_score_chart(
+                round_results,
+                initial_score=summary["initial_score"],
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No round results to chart yet.")
+
+    # ── Criterion Breakdown ───────────────────────────────────────────────────
+    with heatmap_tab:
+        if round_results:
+            heatmap_fig = _build_heatmap(round_results, criteria)
+            st.plotly_chart(heatmap_fig, use_container_width=True)
+
+            st.markdown("#### Summary by Criterion")
+            df = _build_summary_df(criteria, round_results, baseline_criterion_scores)
+            if not df.empty:
+                styled = df.style.apply(_highlight_positive_change, axis=1).format(
+                    {"Baseline %": "{:.1f}", "Final %": "{:.1f}", "Change (pp)": "{:+.1f}"}
+                )
+                st.dataframe(styled, use_container_width=True, hide_index=True)
+        else:
+            st.info("No round results to display yet.")
+
+    # ── Prompt Diff & Log ────────────────────────────────────────────────────
+    with diff_tab:
+        left, right = st.columns([1, 1])
+        with left:
+            st.markdown("**Original Prompt**")
+            st.code(summary.get("original_prompt", ""), language=None)
+        with right:
+            st.markdown("**Optimized Prompt**")
+            st.code(summary.get("final_prompt", ""), language=None)
+
+        st.markdown("#### What Changed")
+        history = summary.get("commit_history", [])
+        kept_rounds = [
+            h for h in reversed(history)
+            if h.get("round") and h["round"] > 0
+        ]
+        if kept_rounds:
+            for i, h in enumerate(kept_rounds, start=1):
+                score_str = f"{h['score']:.1f}%" if h["score"] is not None else "—"
+                st.markdown(f"{i}. Round {h['round']}: _{h['message']}_ (score: {score_str})")
+        else:
+            st.info("No rounds were kept — prompt is unchanged.")
+
+        st.markdown("#### Full Experiment Log")
+        st.text_area(
+            label="Full Experiment Log",
+            value=summary.get("full_log", ""),
+            height=300,
+            disabled=True,
+            label_visibility="collapsed",
+        )
+
+    # ── Download button ───────────────────────────────────────────────────────
+    st.divider()
+    zip_bytes = _build_download_zip(summary)
+    st.download_button(
+        label="⬇ Download Results (prompt + log + summary)",
+        data=zip_bytes,
+        file_name="autoeval_results.zip",
+        mime="application/zip",
+        use_container_width=True,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Tab 1: Try the Demo
 # ---------------------------------------------------------------------------
 
@@ -142,7 +409,7 @@ def tab_demo() -> None:
     )
     st.divider()
 
-    # ── Load demo assets ────────────────────────────────────────────────────
+    # ── Load demo assets ─────────────────────────────────────────────────────
     broken_prompt = _load_text(BASE / "demo" / "broken_prompt.txt")
     criteria = _load_json(BASE / "demo" / "eval_criteria.json")
     scenarios = _load_json(BASE / "demo" / "test_scenarios.json")
@@ -150,7 +417,7 @@ def tab_demo() -> None:
     if broken_prompt is None or criteria is None or scenarios is None:
         st.stop()
 
-    # ── Three-column setup display ───────────────────────────────────────────
+    # ── Three-column setup display ────────────────────────────────────────────
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
         _render_broken_prompt(broken_prompt)
@@ -161,7 +428,7 @@ def tab_demo() -> None:
 
     st.divider()
 
-    # ── Settings ────────────────────────────────────────────────────────────
+    # ── Settings ──────────────────────────────────────────────────────────────
     with st.expander("⚙️ Settings", expanded=False):
         max_rounds = st.slider(
             "Number of rounds",
@@ -179,13 +446,12 @@ def tab_demo() -> None:
                 "Reduces API calls by 60% — good for demos and development."
             ),
         )
-    # Provide defaults when expander hasn't been interacted with
     if "max_rounds" not in st.session_state:
         st.session_state.max_rounds = 20
     if "quick_mode" not in st.session_state:
         st.session_state.quick_mode = True
 
-    # ── Run button ───────────────────────────────────────────────────────────
+    # ── Run button ────────────────────────────────────────────────────────────
     _, btn_col, _ = st.columns([1, 2, 1])
     with btn_col:
         run_clicked = st.button(
@@ -194,7 +460,7 @@ def tab_demo() -> None:
             type="primary",
         )
 
-    # ── Execution ────────────────────────────────────────────────────────────
+    # ── Execution ─────────────────────────────────────────────────────────────
     if run_clicked:
         groq_key = os.getenv("GROQ_API_KEY", "")
         gemini_key = os.getenv("GEMINI_API_KEY", "")
@@ -205,15 +471,14 @@ def tab_demo() -> None:
             st.error("GEMINI_API_KEY is not set. Add it to your `.env` file.")
             st.stop()
 
-        # Reset session state for a fresh run
         st.session_state.round_results = []
         st.session_state.summary = None
+        st.session_state.baseline_criterion_scores = {}
 
-        # Clean workspace so every demo run starts from scratch
+        # Clean workspace for a fresh run
         demo_workspace = BASE / "workspace"
-        git_dir = demo_workspace / ".git"
-        if git_dir.exists():
-            shutil.rmtree(git_dir)
+        if (demo_workspace / ".git").exists():
+            shutil.rmtree(demo_workspace / ".git")
         for leftover in ("current_prompt.txt", "results.log"):
             (demo_workspace / leftover).unlink(missing_ok=True)
 
@@ -228,6 +493,13 @@ def tab_demo() -> None:
         if quick_mode:
             harness.run_evaluation = harness.run_quick_evaluation  # type: ignore[method-assign]
 
+        # One pre-loop baseline eval to capture per-criterion baseline scores
+        # (loop.run() also runs one internally, so this is a deliberate extra call
+        # purely to populate the "Baseline %" column in the summary table)
+        with st.spinner("Scoring baseline prompt…"):
+            baseline_eval = harness.run_evaluation()
+        st.session_state.baseline_criterion_scores = baseline_eval.per_criterion_scores
+
         git_mgr = PromptGitManager(workspace_path=str(demo_workspace))
 
         loop = OptimizationLoop(
@@ -239,7 +511,6 @@ def tab_demo() -> None:
             consecutive_target_rounds=3,
         )
 
-        # Progress bar + live feed placeholders
         progress_bar = st.progress(0.0, text="Starting…")
         feed_placeholder = st.empty()
 
@@ -252,7 +523,9 @@ def tab_demo() -> None:
                 f"score {result.score_after:.1f}%"
             )
             progress_bar.progress(min(pct, 1.0), text=label)
-            _render_progress_feed(feed_placeholder, st.session_state.round_results, max_rounds)
+            _render_progress_feed(
+                feed_placeholder, st.session_state.round_results, max_rounds
+            )
 
         with st.spinner("Optimization running… this may take a few minutes."):
             summary = loop.run(
@@ -263,9 +536,14 @@ def tab_demo() -> None:
         st.session_state.summary = summary
         progress_bar.progress(1.0, text="Complete!")
 
-    # ── Summary (shown after run or from session state) ───────────────────
+    # ── Metrics + results panels (shown after run or from session state) ───────
     if st.session_state.get("summary"):
         summary = st.session_state.summary
+        round_results: list[RoundResult] = st.session_state.get("round_results", [])
+        baseline_criterion_scores: dict = st.session_state.get(
+            "baseline_criterion_scores", {}
+        )
+
         st.divider()
         st.markdown("### Results")
 
@@ -280,38 +558,13 @@ def tab_demo() -> None:
         m4.metric("Rounds Kept", summary["rounds_kept"])
         m5.metric("Rounds Reverted", summary["rounds_reverted"])
 
-        st.markdown("#### Final Prompt")
-        st.code(summary["final_prompt"], language=None)
-
-        with st.expander("View prompt diff (original vs. final)"):
-            diff_text = summary.get("diff", "")
-            if not diff_text:
-                # Generate diff on the fly if not in summary
-                git_mgr_r = PromptGitManager(workspace_path=str(BASE / "workspace"))
-                try:
-                    diff_text = git_mgr_r.get_prompt_diff(summary["original_prompt"])
-                except Exception:
-                    diff_text = ""
-            if diff_text:
-                st.code(diff_text, language="diff")
-            else:
-                st.info("No changes — prompt is identical to original.")
-
-        with st.expander("View experiment log"):
-            st.text(summary["full_log"])
-
-        with st.expander("View commit history"):
-            for entry in reversed(summary["commit_history"]):
-                r_label = (
-                    f"Round {entry['round']}" if entry["round"] else "Baseline"
-                )
-                score_label = (
-                    f"{entry['score']:.1f}%" if entry["score"] is not None else "—"
-                )
-                st.markdown(
-                    f"- `{r_label}` &nbsp; score: **{score_label}** &nbsp; "
-                    f"_{entry['message']}_"
-                )
+        st.markdown("")  # spacing
+        _render_results_tabs(
+            summary=summary,
+            round_results=round_results,
+            criteria=criteria,
+            baseline_criterion_scores=baseline_criterion_scores,
+        )
 
 
 # ---------------------------------------------------------------------------
