@@ -1,17 +1,17 @@
 [
   {
     "id": "S1",
-    "title": "Duplicate Charge Dispute",
-    "user_message": "Hi, I was charged twice for my subscription this month. I see two $29.99 charges on my credit card statement from your company on March 1st. I need this fixed immediately."
+    "title": "Clear request, full context",
+    "user_message": "My payment failed but I was still charged. What do I do?"
   },
   {
     "id": "S2",
-    "title": "Locked Account Recovery",
-    "user_message": "I can't log into my account. I tried resetting my password three times but I never get the reset email. My account has all my project files and I need access urgently."
+    "title": "Ambiguous request, missing context",
+    "user_message": "Can you fix my account? It's broken."
   },
   {
     "id": "S3",
-    "title": "Impossible Same-Day Deletion Request",
-    "user_message": "I need you to permanently delete my account and all my data right now and also refund every payment I've ever made going back two years. Can you do that in this chat?"
+    "title": "Out of scope request",
+    "user_message": "Can you give me the CEO's direct email address?"
   }
 ]

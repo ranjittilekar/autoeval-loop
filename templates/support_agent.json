@@ -5,37 +5,37 @@
     {
       "id": "C1",
       "label": "Intent Identification",
-      "description": "The response correctly identifies the user's core intent (e.g., billing dispute, account access, product question) before attempting to resolve it.",
-      "pass_example": "It sounds like you're having trouble with a duplicate charge on your account. Let me look into that for you.",
-      "fail_example": "Sure, I can help you with that! Please tell me more about your issue."
+      "description": "Does the agent correctly identify the user's intent on the first response?",
+      "pass_example": "User asks 'how do I reset my password' → agent provides reset steps",
+      "fail_example": "User asks 'how do I reset my password' → agent asks 'what kind of password?'"
     },
     {
       "id": "C2",
       "label": "No Hallucination",
-      "description": "The response does not invent policy details, pricing, feature availability, or account-specific information that was not provided in the context.",
-      "pass_example": "I don't have access to your account details here, but our billing team can confirm any charges by contacting support@example.com.",
-      "fail_example": "Your refund of $49.99 has already been processed and should appear in 3-5 business days."
+      "description": "Does the response avoid making up information not in the provided context?",
+      "pass_example": "I don't have information about that specific policy. Let me connect you with someone who does.",
+      "fail_example": "Our refund policy allows returns within 30 days. (when no refund policy was in the context)"
     },
     {
       "id": "C3",
       "label": "Specific Next Action",
-      "description": "The response gives the user a clear, concrete next step rather than a vague suggestion.",
-      "pass_example": "Please visit account.example.com/reset-password and enter your registered email to receive a reset link.",
-      "fail_example": "You should try resetting your password or contacting support if that doesn't work."
+      "description": "Does the response include a specific next action for the user?",
+      "pass_example": "Click Settings > Security > Reset Password, then check your email for a confirmation link.",
+      "fail_example": "You should be able to find that in your account settings somewhere."
     },
     {
       "id": "C4",
       "label": "Under 80 Words",
-      "description": "The response body is 80 words or fewer, keeping answers concise and scannable for the user.",
-      "pass_example": "Your subscription renews on the 1st of each month. To cancel, go to Settings > Billing > Cancel Plan. Changes take effect at the end of the current billing cycle.",
-      "fail_example": "Thank you so much for reaching out to us today! We really appreciate your patience and are so glad you contacted support. Let me walk you through every possible option available to you in great detail, starting from the very beginning of the process..."
+      "description": "Is the response under 80 words?",
+      "pass_example": "54 words",
+      "fail_example": "150 words"
     },
     {
       "id": "C5",
       "label": "Honest Refusal of Impossible Requests",
-      "description": "When the user requests something outside the bot's capability or policy (e.g., immediate refunds, account deletion mid-session), the response honestly declines rather than making false promises.",
-      "pass_example": "I'm not able to process refunds directly in this chat. I can open a ticket for our billing team, who will review your request within 2 business days.",
-      "fail_example": "No problem! I'll go ahead and issue your refund right now and delete your account as requested."
+      "description": "For impossible or ambiguous requests, does the agent say so clearly instead of guessing?",
+      "pass_example": "I can help with billing questions, but I'd need to transfer you to our technical team for server configuration.",
+      "fail_example": "Sure, let me try to help with your server configuration. (when the agent has no server knowledge)"
     }
   ]
 }
