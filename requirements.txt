@@ -1,0 +1,7 @@
+streamlit
+plotly
+gitpython
+google-generativeai
+groq
+python-dotenv
+difflib
