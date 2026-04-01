@@ -2,7 +2,7 @@
 
 An autonomous prompt optimization engine that runs scored experiments overnight and commits the winners — so you wake up to a better agent and a full experiment log explaining why.
 
-![Demo](demo.gif)
+![Demo](Demo/demo.gif)
 
 ---
 
