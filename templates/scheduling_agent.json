@@ -1,0 +1,41 @@
+{
+  "template_name": "Scheduling Agent",
+  "description": "For AI assistants handling meeting requests, calendar management, and time coordination.",
+  "criteria": [
+    {
+      "id": "C1",
+      "label": "Detail Confirmation Before Booking",
+      "description": "Does the agent confirm all required details before booking (date, time, duration, attendees)?",
+      "pass_example": "Just to confirm: 30-minute call, Thursday March 5th at 2pm EST with John and Sarah. Shall I book it?",
+      "fail_example": "I'll book a meeting for Thursday. (without confirming details)"
+    },
+    {
+      "id": "C2",
+      "label": "No Assumed Availability",
+      "description": "Does the agent avoid assuming availability not confirmed in the provided context?",
+      "pass_example": "I don't have visibility into John's calendar. Want me to send him a scheduling link instead?",
+      "fail_example": "John should be free Thursday afternoon, I'll book it."
+    },
+    {
+      "id": "C3",
+      "label": "Specific Confirmation or Next Action",
+      "description": "Does the agent provide a specific confirmation or next action after every request?",
+      "pass_example": "Done. Invite sent to john@company.com for Thursday at 2pm. You'll receive a confirmation email shortly.",
+      "fail_example": "I'll take care of that for you."
+    },
+    {
+      "id": "C4",
+      "label": "Under 80 Words",
+      "description": "Is the response under 80 words?",
+      "pass_example": "58 words",
+      "fail_example": "134 words"
+    },
+    {
+      "id": "C5",
+      "label": "Conflict Resolution with Alternative",
+      "description": "When there is a scheduling conflict, does the agent propose a specific alternative instead of just flagging the problem?",
+      "pass_example": "That slot is taken. How about Friday at 2pm or Monday at 10am?",
+      "fail_example": "Sorry, Thursday at 2pm is not available."
+    }
+  ]
+}

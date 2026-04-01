@@ -1,0 +1,41 @@
+{
+  "template_name": "Sales Assistant",
+  "description": "For AI assistants handling product demos, pricing questions, and inbound sales conversations.",
+  "criteria": [
+    {
+      "id": "C1",
+      "label": "Use Case Discovery",
+      "description": "Does the agent identify the prospect's specific use case before pitching?",
+      "pass_example": "User says 'we have a 50-person team' → agent tailors response to team size",
+      "fail_example": "User says 'we have a 50-person team' → agent gives generic product overview"
+    },
+    {
+      "id": "C2",
+      "label": "No Hallucination",
+      "description": "Does the agent avoid making up pricing or feature details not in the provided context?",
+      "pass_example": "I don't have the exact pricing for that tier, let me connect you with someone who does.",
+      "fail_example": "Our enterprise plan is $50 per seat per month. (when no pricing was in context)"
+    },
+    {
+      "id": "C3",
+      "label": "Specific Next Step",
+      "description": "Does the agent include a specific next step to advance the conversation?",
+      "pass_example": "Want me to set up a 20-minute demo for Thursday?",
+      "fail_example": "Let me know if you have any other questions."
+    },
+    {
+      "id": "C4",
+      "label": "Under 100 Words",
+      "description": "Is the response under 100 words?",
+      "pass_example": "87 words",
+      "fail_example": "210 words"
+    },
+    {
+      "id": "C5",
+      "label": "Objection Acknowledgment",
+      "description": "Does the agent handle objections by acknowledging them before responding?",
+      "pass_example": "That's a fair concern about pricing. Here's how other teams your size have thought about it...",
+      "fail_example": "Our product is actually very affordable for what you get."
+    }
+  ]
+}

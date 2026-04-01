@@ -1,0 +1,41 @@
+{
+  "template_name": "Knowledge Base Bot",
+  "description": "For AI assistants answering internal or external questions strictly from a provided knowledge base.",
+  "criteria": [
+    {
+      "id": "C1",
+      "label": "Topic Identification",
+      "description": "Does the agent correctly identify the topic of the question on the first response?",
+      "pass_example": "User asks about vacation policy → agent retrieves vacation policy section",
+      "fail_example": "User asks about vacation policy → agent retrieves sick leave policy"
+    },
+    {
+      "id": "C2",
+      "label": "No Outside Information",
+      "description": "Does the agent answer strictly from the knowledge base without adding outside information?",
+      "pass_example": "According to our policy, employees receive 15 days of PTO per year.",
+      "fail_example": "Most companies offer around 15 days which is standard in the industry. (when sourced from outside KB)"
+    },
+    {
+      "id": "C3",
+      "label": "Source Citation",
+      "description": "Does the agent cite which section or document the answer comes from?",
+      "pass_example": "From the Employee Handbook, Section 4.2: PTO Policy...",
+      "fail_example": "You get 15 days of PTO per year."
+    },
+    {
+      "id": "C4",
+      "label": "Under 100 Words",
+      "description": "Is the response under 100 words?",
+      "pass_example": "74 words",
+      "fail_example": "189 words"
+    },
+    {
+      "id": "C5",
+      "label": "Honest Gap Acknowledgment",
+      "description": "When the answer is not in the knowledge base, does the agent say so clearly instead of guessing?",
+      "pass_example": "I don't have information about that in the current knowledge base. You may want to contact HR directly.",
+      "fail_example": "I believe the policy is around 10 days but you should double check."
+    }
+  ]
+}

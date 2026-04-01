@@ -397,6 +397,39 @@ def _render_results_tabs(
 
 
 # ---------------------------------------------------------------------------
+# Shared results renderer (called by both Tab 1 and Tab 2)
+# ---------------------------------------------------------------------------
+
+def render_results(
+    round_results: list[RoundResult],
+    summary: dict,
+    criteria: list[dict],
+    baseline_criterion_scores: dict[str, float],
+) -> None:
+    st.divider()
+    st.markdown("### Results")
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric("Initial Score", f"{summary['initial_score']:.1f}%")
+    m2.metric(
+        "Final Score",
+        f"{summary['final_score']:.1f}%",
+        delta=f"+{summary['improvement']:.1f}%",
+    )
+    m3.metric("Rounds Run", summary["rounds_run"])
+    m4.metric("Rounds Kept", summary["rounds_kept"])
+    m5.metric("Rounds Reverted", summary["rounds_reverted"])
+
+    st.markdown("")  # spacing
+    _render_results_tabs(
+        summary=summary,
+        round_results=round_results,
+        criteria=criteria,
+        baseline_criterion_scores=baseline_criterion_scores,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Tab 1: Try the Demo
 # ---------------------------------------------------------------------------
 
@@ -544,28 +577,299 @@ def tab_demo() -> None:
             "baseline_criterion_scores", {}
         )
 
-        st.divider()
-        st.markdown("### Results")
-
-        m1, m2, m3, m4, m5 = st.columns(5)
-        m1.metric("Initial Score", f"{summary['initial_score']:.1f}%")
-        m2.metric(
-            "Final Score",
-            f"{summary['final_score']:.1f}%",
-            delta=f"+{summary['improvement']:.1f}%",
-        )
-        m3.metric("Rounds Run", summary["rounds_run"])
-        m4.metric("Rounds Kept", summary["rounds_kept"])
-        m5.metric("Rounds Reverted", summary["rounds_reverted"])
-
-        st.markdown("")  # spacing
-        _render_results_tabs(
-            summary=summary,
+        render_results(
             round_results=round_results,
+            summary=summary,
             criteria=criteria,
             baseline_criterion_scores=baseline_criterion_scores,
         )
 
+
+# ---------------------------------------------------------------------------
+# Tab 2: Optimize Your Own
+# ---------------------------------------------------------------------------
+
+def _load_templates() -> dict[str, dict]:
+    """Returns {template_name: template_dict} for all JSON files in templates/."""
+    result: dict[str, dict] = {}
+    templates_dir = BASE / "templates"
+    if templates_dir.exists():
+        for f in sorted(templates_dir.glob("*.json")):
+            try:
+                data = json.loads(f.read_text(encoding="utf-8"))
+                name = data.get("template_name", f.stem)
+                result[name] = data
+            except json.JSONDecodeError:
+                pass
+    return result
+
+
+def _on_template_change(templates: dict[str, dict]) -> None:
+    selected = st.session_state["tab2_template_select"]
+    if selected == "Write my own criteria" or selected not in templates:
+        for i in range(1, 6):
+            st.session_state[f"tab2_c{i}"] = ""
+    else:
+        for i, crit in enumerate(templates[selected]["criteria"], start=1):
+            st.session_state[f"tab2_c{i}"] = crit["description"]
+
+
+def tab_optimize() -> None:
+    st.title("Optimize Your Own Prompt")
+    st.markdown(
+        "Paste your agent's system prompt, define what good looks like, "
+        "and let the loop find a better version."
+    )
+    st.divider()
+
+    templates = _load_templates()
+
+    # ── STEP 1 ───────────────────────────────────────────────────────────────
+    st.markdown("### Step 1 — Your System Prompt")
+    system_prompt = st.text_area(
+        "Your System Prompt",
+        height=200,
+        placeholder=(
+            "Paste your agent's system prompt here. "
+            "This is the one file the loop will optimize."
+        ),
+        key="tab2_system_prompt",
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+
+    # ── STEP 2 ───────────────────────────────────────────────────────────────
+    st.markdown("### Step 2 — Choose a Template")
+
+    template_options = ["Write my own criteria"] + list(templates.keys())
+
+    st.selectbox(
+        "Eval template",
+        options=template_options,
+        key="tab2_template_select",
+        on_change=_on_template_change,
+        args=(templates,),
+        label_visibility="collapsed",
+    )
+
+    st.divider()
+
+    # ── STEP 3 ───────────────────────────────────────────────────────────────
+    st.markdown("### Step 3 — Eval Criteria")
+    st.caption("Five yes/no checks the judge will score on every round.")
+
+    criteria_labels = ["C1", "C2", "C3", "C4", "C5"]
+    for i, label in enumerate(criteria_labels, start=1):
+        # Initialise key if not already set
+        if f"tab2_c{i}" not in st.session_state:
+            st.session_state[f"tab2_c{i}"] = ""
+
+        st.text_input(
+            label,
+            placeholder="Does the agent [specific yes/no behavior]?",
+            key=f"tab2_c{i}",
+        )
+        st.caption("Must be yes/no. Avoid vague questions.")
+
+    st.divider()
+
+    # ── STEP 4 ───────────────────────────────────────────────────────────────
+    st.markdown("### Step 4 — Test Scenarios")
+    st.caption("Realistic user messages your agent would face.")
+
+    scenario1 = st.text_area(
+        "Scenario 1",
+        height=80,
+        placeholder="Describe a realistic user message your agent would face.",
+        key="tab2_scenario1",
+    )
+    scenario2 = st.text_area(
+        "Scenario 2",
+        height=80,
+        placeholder="Describe a realistic user message your agent would face.",
+        key="tab2_scenario2",
+    )
+    scenario3 = st.text_area(
+        "Scenario 3",
+        height=80,
+        placeholder="Describe a realistic user message your agent would face.",
+        key="tab2_scenario3",
+    )
+
+    st.divider()
+
+    # ── STEP 5 ───────────────────────────────────────────────────────────────
+    with st.expander("⚙️ Settings", expanded=False):
+        tab2_max_rounds = st.slider(
+            "Number of rounds",
+            min_value=5,
+            max_value=50,
+            value=20,
+            step=1,
+            help="Maximum rounds the loop will run before stopping.",
+            key="tab2_max_rounds",
+        )
+        tab2_quick_mode = st.checkbox(
+            "Quick mode (2 responses per scenario, faster but less accurate)",
+            value=True,
+            help=(
+                "Uses 2 agent responses per scenario instead of 5. "
+                "Reduces API calls by 60% — good for demos and development."
+            ),
+            key="tab2_quick_mode",
+        )
+
+    # ── RUN BUTTON ────────────────────────────────────────────────────────────
+    _, btn_col, _ = st.columns([1, 2, 1])
+    with btn_col:
+        run_clicked = st.button(
+            "Run Optimization",
+            use_container_width=True,
+            type="primary",
+            key="tab2_run_btn",
+        )
+
+    # ── Validation ────────────────────────────────────────────────────────────
+    if run_clicked:
+        missing: list[str] = []
+
+        if not system_prompt.strip():
+            missing.append("System Prompt (Step 1)")
+
+        for i in range(1, 6):
+            val = st.session_state.get(f"tab2_c{i}", "").strip()
+            if not val:
+                missing.append(f"C{i} (Step 3)")
+
+        for i, val in enumerate([scenario1, scenario2, scenario3], start=1):
+            if not val.strip():
+                missing.append(f"Scenario {i} (Step 4)")
+
+        if missing:
+            st.warning(
+                "Please fill in the following fields before running:\n\n"
+                + "\n".join(f"- {m}" for m in missing)
+            )
+            run_clicked = False
+
+    # ── Execution ─────────────────────────────────────────────────────────────
+    if run_clicked:
+        groq_key = os.getenv("GROQ_API_KEY", "")
+        gemini_key = os.getenv("GEMINI_API_KEY", "")
+        if not groq_key or groq_key == "your_groq_api_key_here":
+            st.error("GROQ_API_KEY is not set. Add it to your `.env` file.")
+            st.stop()
+        if not gemini_key or gemini_key == "your_gemini_api_key_here":
+            st.error("GEMINI_API_KEY is not set. Add it to your `.env` file.")
+            st.stop()
+
+        # Build criteria list — use full template dicts if a template was chosen,
+        # otherwise construct minimal dicts from the text inputs.
+        selected_template = st.session_state.get("tab2_template_select", "")
+        if selected_template and selected_template != "Write my own criteria" and selected_template in templates:
+            run_criteria = templates[selected_template]["criteria"]
+        else:
+            run_criteria = [
+                {
+                    "id": f"C{i}",
+                    "label": st.session_state[f"tab2_c{i}"][:30],
+                    "description": st.session_state[f"tab2_c{i}"],
+                    "pass_example": "",
+                    "fail_example": "",
+                }
+                for i in range(1, 6)
+            ]
+
+        run_scenarios = [
+            {"title": f"Scenario {i}", "user_message": v.strip()}
+            for i, v in enumerate([scenario1, scenario2, scenario3], start=1)
+        ]
+
+        st.session_state.tab2_round_results = []
+        st.session_state.tab2_summary = None
+        st.session_state.tab2_baseline_criterion_scores = {}
+        st.session_state.tab2_criteria = run_criteria
+
+        # Clean workspace for a fresh run
+        tab2_workspace = BASE / "workspace_tab2"
+        tab2_workspace.mkdir(exist_ok=True)
+        if (tab2_workspace / ".git").exists():
+            shutil.rmtree(tab2_workspace / ".git")
+        for leftover in ("current_prompt.txt", "results.log"):
+            (tab2_workspace / leftover).unlink(missing_ok=True)
+
+        harness = EvalHarness(
+            system_prompt=system_prompt.strip(),
+            criteria=run_criteria,
+            scenarios=run_scenarios,
+            groq_api_key=groq_key,
+            gemini_api_key=gemini_key,
+        )
+        if tab2_quick_mode:
+            harness.run_evaluation = harness.run_quick_evaluation  # type: ignore[method-assign]
+
+        with st.spinner("Scoring baseline prompt…"):
+            baseline_eval = harness.run_evaluation()
+        st.session_state.tab2_baseline_criterion_scores = baseline_eval.per_criterion_scores
+
+        git_mgr = PromptGitManager(workspace_path=str(tab2_workspace))
+
+        loop = OptimizationLoop(
+            eval_harness=harness,
+            git_manager=git_mgr,
+            gemini_api_key=gemini_key,
+            max_rounds=tab2_max_rounds,
+            target_score=95.0,
+            consecutive_target_rounds=3,
+        )
+
+        progress_bar = st.progress(0.0, text="Starting…")
+        feed_placeholder = st.empty()
+
+        def on_round(result: RoundResult) -> None:
+            st.session_state.tab2_round_results.append(result)
+            done = len(st.session_state.tab2_round_results)
+            pct = done / tab2_max_rounds
+            label = (
+                f"Round {result.round_num} / {tab2_max_rounds} — "
+                f"score {result.score_after:.1f}%"
+            )
+            progress_bar.progress(min(pct, 1.0), text=label)
+            _render_progress_feed(
+                feed_placeholder, st.session_state.tab2_round_results, tab2_max_rounds
+            )
+
+        with st.spinner("Optimization running… this may take a few minutes."):
+            summary = loop.run(
+                initial_prompt=system_prompt.strip(),
+                on_round_complete=on_round,
+            )
+
+        st.session_state.tab2_summary = summary
+        progress_bar.progress(1.0, text="Complete!")
+
+    # ── Results (shown after run or from session state) ───────────────────────
+    if st.session_state.get("tab2_summary"):
+        render_results(
+            round_results=st.session_state.get("tab2_round_results", []),
+            summary=st.session_state.tab2_summary,
+            criteria=st.session_state.get("tab2_criteria", []),
+            baseline_criterion_scores=st.session_state.get(
+                "tab2_baseline_criterion_scores", {}
+            ),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Sidebar
+# ---------------------------------------------------------------------------
+
+st.sidebar.markdown(
+    "**Tab 2** lets you optimize any agent prompt. "
+    "**Tab 1** uses a pre-loaded broken prompt so you can see the loop work "
+    "without any setup."
+)
 
 # ---------------------------------------------------------------------------
 # App entry point
@@ -577,4 +881,4 @@ with tab1:
     tab_demo()
 
 with tab2:
-    st.info("Coming soon.")
+    tab_optimize()

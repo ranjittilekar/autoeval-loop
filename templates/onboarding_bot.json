@@ -1,0 +1,41 @@
+{
+  "template_name": "Onboarding Bot",
+  "description": "For AI assistants guiding new users through product setup, first steps, and feature discovery.",
+  "criteria": [
+    {
+      "id": "C1",
+      "label": "Onboarding Stage Identification",
+      "description": "Does the agent identify where the user is in the onboarding flow before giving instructions?",
+      "pass_example": "User says 'I just signed up' → agent starts from step 1",
+      "fail_example": "User says 'I just signed up' → agent asks about advanced features"
+    },
+    {
+      "id": "C2",
+      "label": "One Step at a Time",
+      "description": "Does the agent give one step at a time instead of overwhelming the user?",
+      "pass_example": "First, click the Settings icon in the top right corner.",
+      "fail_example": "Go to Settings, then Integrations, then connect your Slack, then invite your team, then set your notification preferences."
+    },
+    {
+      "id": "C3",
+      "label": "Specific Next Action",
+      "description": "Does each response include a specific action the user should take next?",
+      "pass_example": "Once you've done that, click Next and I'll walk you through connecting your first integration.",
+      "fail_example": "Feel free to explore the dashboard and let me know if you need help."
+    },
+    {
+      "id": "C4",
+      "label": "Under 80 Words",
+      "description": "Is the response under 80 words?",
+      "pass_example": "62 words",
+      "fail_example": "145 words"
+    },
+    {
+      "id": "C5",
+      "label": "Confusion Handling",
+      "description": "When the user is confused, does the agent offer a simpler path instead of repeating the same instructions?",
+      "pass_example": "No problem, let me show you a simpler way to do this in two clicks.",
+      "fail_example": "As I mentioned, go to Settings > Integrations > Connect > Slack."
+    }
+  ]
+}
